@@ -32,3 +32,15 @@ Fora (por enquanto): itens de NPC, músicas, corações soltos, skulltulas, loja
 2. Confirmar baús com evento (Espada Kokiri, Botas de Ferro/Serenata) com outro item.
 3. Gancho Longo sem Gancho / Manopla de Ouro sem Prata: a geração já força a ordem.
 4. Save separado para o modo randomizer + seletor no NS2-IA.
+
+## Status 2026-11-10 — PAUSADO (removido do NS2-IA)
+
+O mod gerado (48 arquivos de cena via LayeredFS) deixou o jogo em **tela preta**
+no emulador: menu so com a logo, sem cenario, e travado depois de "Novo jogo".
+Provavel causa: alguma cena reescrita pelo bymlrw.py/modfs.py que o jogo nao aceita
+(investigar comparando cena por cena antes de reusar).
+
+- Seletor NORMAL/RANDOMIZER do NS2-IA revertido (commit bdccb015b0 no NS2-IA-codigo).
+- Ultimo mod gerado guardado em data\mod-randomizer-arquivado-20261110 (seed Ocarina-Sheik-325).
+- Plano: reaproveitar logica.py / desenho do SoH numa futura **versao nativa de PC**,
+  onde mexer nos arquivos e mais facil que no emulador.
