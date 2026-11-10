@@ -7,6 +7,7 @@ Saida (padrao D:\\NS2-IA\\notas\\0400486024DEC000\\):
 uso: python gerar_notas.py [pasta_saida]
 """
 import os, sys, json, re
+import mmh3
 sys.path.insert(0, os.path.dirname(__file__))
 import ootlib as L
 import bntx
@@ -194,14 +195,19 @@ def main():
                 px = py = None
         k = (area or folder, cat)
         count[k] = count.get(k, 0) + 1
-        checks.append(dict(id='%016x' % x['hash'], cat=cat, nome=nome, area=area or folder,
-                           area_nome=AREA_PT.get(area or folder, folder), era=era, x=px, y=py,
-                           n=count[k], chave='%016x' % x['hash']))
+        ck = dict(id='%016x' % x['hash'], cat=cat, nome=nome, area=area or folder,
+                  area_nome=AREA_PT.get(area or folder, folder), era=era, x=px, y=py,
+                  n=count[k], chave='%016x' % x['hash'])
+        if 'TBox' in x['gyaml']:
+            # bau aberto = Bool "IsTreasureBoxOpen.<hash do ator em decimal>" (achado 2026-11-09 abrindo
+            # o bau do pedaco de coracao no Vale Gerudo); a chave de 64 bits do bau nunca liga
+            ck['flag'] = mmh3.hash('IsTreasureBoxOpen.%d' % x['hash'], 0, signed=False)
+            del ck['chave']
+        checks.append(ck)
     for c in checks:
         c['nome'] = '%s #%d' % (c['nome'], c['n']) if c['cat'] in ('skulltula', 'coracao', 'recipiente', 'rupia_prata', 'deku', 'parede') else c['nome']
         del c['n']
 
-    import mmh3
     listas = [dict(lista=l, nome=n, flag=mmh3.hash(f, 0, signed=False), flag_nome=f) for l, f, n in LISTAS]
     names = json.load(open(os.path.join(DATA, 'names.json')))
     for h, n in sorted(names.items(), key=lambda kv: kv[1]):
