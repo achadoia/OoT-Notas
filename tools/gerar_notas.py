@@ -33,7 +33,9 @@ AREA_PT = {
     'GerudoTrainingGround': 'Campo de Treino Gerudo', 'DreamWorld': 'Mundo dos Sonhos',
 }
 
-# categoria: (nome, grupo, cor, letra, visivel por padrao)
+# categoria: (nome, grupo, cor, letra, visivel por padrao[, rastreavel])
+# rastreavel=False: o jogo NAO guarda no save (ResetType != 24, o objeto volta ao reentrar na area);
+# aparece no mapa so como referencia, sem contador nem "pego".
 CATS = {
     'skulltula': ('Skulltulas Douradas', 'Colecionáveis', '#f2c14e', 'S', True),
     'coracao': ('Pedaços de Coração', 'Colecionáveis', '#ff5d8f', '♥', True),
@@ -42,9 +44,8 @@ CATS = {
     'bau_chave': ('Baús de chaves, mapa e bússola', 'Baús', '#8fd14f', 'K', True),
     'bau_rupia': ('Baús de rupias e munição', 'Baús', '#9aa5b1', '$', True),
     'rupia_prata': ('Rupias Prateadas', 'Itens', '#d6dde6', '◆', False),
-    'deku': ('Vendedores Deku', 'Personagens', '#c58b4b', 'D', False),
+    'deku': ('Vendedores Deku', 'Referência', '#c58b4b', 'D', False, False),
     'parede': ('Paredes rachadas', 'Outros', '#b07cff', '✕', False),
-    'fada': ('Fadas', 'Outros', '#7ff0e0', 'F', False),
 }
 
 DROP_PT = {
@@ -119,8 +120,6 @@ def cat_of(x):
         return ('deku', 'Vendedor Deku') if not g.endswith('_Leaf') else (None, None)
     if g == 'WallCrack':
         return 'parede', 'Parede rachada'
-    if g == 'Obj_FairySpirit':
-        return 'fada', 'Fada'
     return None, None
 
 
@@ -199,7 +198,7 @@ def main():
                            area_nome=AREA_PT.get(area or folder, folder), era=era, x=px, y=py,
                            n=count[k], chave='%016x' % x['hash']))
     for c in checks:
-        c['nome'] = '%s #%d' % (c['nome'], c['n']) if c['cat'] in ('skulltula', 'coracao', 'recipiente', 'rupia_prata', 'deku', 'parede', 'fada') else c['nome']
+        c['nome'] = '%s #%d' % (c['nome'], c['n']) if c['cat'] in ('skulltula', 'coracao', 'recipiente', 'rupia_prata', 'deku', 'parede') else c['nome']
         del c['n']
 
     import mmh3
@@ -210,7 +209,8 @@ def main():
         if m and 'Melody' not in n and m.group(1) in ITEM_PT:
             listas.append(dict(lista='Itens', nome=ITEM_PT[m.group(1)], flag=int(h), flag_nome=n))
 
-    cats = [dict(id=k, nome=v[0], grupo=v[1], cor=v[2], letra=v[3], visivel=v[4]) for k, v in CATS.items()]
+    cats = [dict(id=k, nome=v[0], grupo=v[1], cor=v[2], letra=v[3], visivel=v[4],
+                 rastreavel=v[5] if len(v) > 5 else True) for k, v in CATS.items()]
     out = dict(versao=1, jogo='The Legend of Zelda: Ocarina of Time', titulo='0400486024DEC000',
                mapa_w=MAP_W, mapa_h=MAP_H, areas=areas, categorias=cats, checks=checks, listas=listas)
     json.dump(out, open(os.path.join(OUT, 'notas.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=0)
