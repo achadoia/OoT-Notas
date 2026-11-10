@@ -217,8 +217,26 @@ def main():
 
     cats = [dict(id=k, nome=v[0], grupo=v[1], cor=v[2], letra=v[3], visivel=v[4],
                  rastreavel=v[5] if len(v) > 5 else True) for k, v in CATS.items()]
-    out = dict(versao=1, jogo='The Legend of Zelda: Ocarina of Time', titulo='0400486024DEC000',
-               mapa_w=MAP_W, mapa_h=MAP_H, areas=areas, categorias=cats, checks=checks, listas=listas)
+    # banc (cena) atual -> [area, era]. O save guarda String64 "Sequence_CurrentBanc" (ex. "Market_Child"),
+    # Bool "Sequence_IsChildhood" e Vector3 "Player_Pos_For_Map"; o jogo faz autosave a cada troca de area.
+    bancs = {}
+    for m in menu:
+        area_id = m['LocationName']
+        if area_id not in area_ids:
+            continue
+        nomes = m['BancName'][:2] + [c.get('BancName') for c in m.get('ChangeBancInfo', []) if c.get('BancName')]
+        for i, b in enumerate(nomes):
+            era = 'adulto' if (i == 1 or '_Adult' in b) and '_Child' not in b else 'crianca'
+            if m['BancName'][0] == m['BancName'][1]:
+                era = ''  # masmorra: a idade vem de Sequence_IsChildhood
+            bancs.setdefault(b, [area_id, era])
+    if 'GanonCastle' in area_ids:
+        bancs.setdefault('InsideGanonCastle', ['GanonCastle', ''])
+    estado = {k: mmh3.hash(k, 0, signed=False) for k in
+              ('Sequence_CurrentBanc', 'Sequence_IsChildhood', 'Player_Pos_For_Map', 'Player_Rot_For_Map')}
+    out = dict(versao=2, jogo='The Legend of Zelda: Ocarina of Time', titulo='0400486024DEC000',
+               mapa_w=MAP_W, mapa_h=MAP_H, areas=areas, categorias=cats, checks=checks, listas=listas,
+               bancs=bancs, estado=estado)
     json.dump(out, open(os.path.join(OUT, 'notas.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=0)
     from collections import Counter
     print(len(areas), 'areas', len(checks), 'checks', len(listas), 'itens de lista')
