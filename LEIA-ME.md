@@ -61,6 +61,28 @@ Atores com flag de 64 bits: 3871. Principais Gyaml:
 Pendente: confirmar que baú aberto = chave ligada (o slot 04 tem poucas, então talvez use `ExtraByte`),
 ler o conteúdo dos baús (`Dynamic`) e dar nome em pt-BR a cada check (área + sala).
 
+## Mapas (painel Notas)
+
+- Texturas: `UI/CustomTex/Map/Field/<Area>_<Child|Adult>_00.bntx.zs` (2000x1440) e
+  `UI/CustomTex/Map/Dungeon/<Masmorra>_All.bntx.zs` (silhueta), mais os andares `_1F_Main/_Alpha/_Back/_Grad`.
+- BNTX do Switch 2: o bloco da plataforma é `Ounc` no lugar de `NX  `. 0x2f06 = ASTC 5x5 sRGB e
+  0x3106 = ASTC 6x6. O swizzle block-linear **muda a ordem dos bits dentro do GOB** (achada por força
+  bruta, imagem perfeita): `byte = x[0:4] | y0<<4 | y1<<5 | x4<<6 | y2<<7 | x5<<8` (`tools\bntx.py`).
+- Posição no mapa: `Game/MapCaptureInfo` (câmera ortográfica) está na MESMA ordem que
+  `Game/MapMenuInfo` (área, Banc e textura). `px = W/2 + (X - CameraPos.X) * H/Height`,
+  `py = H/2 + (Z - CameraPos.Z) * H/Height`. Conferido na Floresta Kokiri e na Caverna dos Dodongos.
+- `tools\gerar_notas.py` gera `D:\NS2-IA\notas\0400486024DEC000\` (notas.json + mapas\*.jpg):
+  31 áreas, 611 checks (100 Skulltulas Douradas, exatamente como no original), listas de Canções e Itens.
+- No NS2-IA: `src/yuzu/fritchii/ns2_notas.{h,cpp}`, aberto em Ferramentas > Notas do Zelda ou pelo F7.
+
+## Mais sobre as chaves de 64 bits
+
+- Skulltula Dourada: a chave do ator marca a skulltula morta, e `hash ± 2` marca a ficha recolhida
+  (os 39 "desconhecidos" do slot 04 eram essas fichas).
+- Baú: cada um tem `hash` e `hash ± 2` no GameDataList (ResetType 24), mas **nenhum dos 6 saves
+  tem baú marcado**, nem em outro formato dentro do arquivo. O ator tem o blackboard `IsOpened` e o
+  `ActorGameDataSetting` AlwaysRespawn. Falta testar: abrir um baú, salvar e comparar os saves.
+
 ## Ferramentas (`tools\`)
 
 - `ootlib.py`: zstd/ZsDic, SARC, BYML (BE/LE, mapas de hash 0x20/0x21) e `read_save()`.
