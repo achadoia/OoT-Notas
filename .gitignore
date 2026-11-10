@@ -1,0 +1,3 @@
+data/
+*.byml
+__pycache__/
