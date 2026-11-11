@@ -204,9 +204,12 @@ def spoiler(seed, locais, colocados, pasta, lojas=None):
     if lojas:
         linhas += ['', '== Lojas ==']
         js['lojas'] = {}
-        for v, novo in zip(*lojas):
+        for v, novo in zip(lojas[0], lojas[1]):
             linhas.append(f'  {X.nome_vitrine(v):45s} -> {novo:28s} (original: {v["gyaml"]})')
             js['lojas'][X.nome_vitrine(v)] = {'item': novo, 'original': v['gyaml']}
+        linhas += ['', '== Deku vendedores ==']
+        for rel, h, k, orig, novo in lojas[2]:
+            linhas.append(f'  {rel.split("/")[1]:20s} #{str(h)[-5:]} {k[-1]}  -> {novo:28s} (original: {orig})')
     linhas += ['', '== Todos os baus ==']
     for i, l in sorted(((i, l) for i, l in enumerate(locais) if not l.get('tipo')),
                        key=lambda x: (x[1]['area'], x[1].get('sala') or 0)):
@@ -249,7 +252,10 @@ def gravar_mod(locais, colocados, nome_mod='Randomizer', seed='', saida=None, rs
             c.trocar_drop(h, item)
     if lojas:
         n_vit = 0
-        for v, novo in zip(*lojas):
+        for rel, h, k, orig, novo in lojas[2]:
+            if novo != orig:
+                cena(rel).ator(h)[1]['Dynamic'][1][k] = (0xA0, novo)
+        for v, novo in zip(lojas[0], lojas[1]):
             if novo != v['gyaml']:
                 n_vit += 1
                 for rel, h in v['copias']:

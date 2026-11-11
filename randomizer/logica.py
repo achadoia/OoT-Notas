@@ -35,9 +35,12 @@ MUSICAS = [ZL, EPONA, SARIA, SOL, TEMPO, TEMPEST, MINUETO, BOLERO, SERENATA, REQ
 # recompensas de NPC que a logica usa
 MAGIA, MAGIA2, DIN = 'Item_FairyBless_MP', 'Item_FairyBless_MPDouble', 'Item_DinFire'
 CARTAO, BRACELETE = 'Item_Token_Gerudo', 'Item_Gauntlet_Goron'
+OCARINA, OCARINA_T, CARTA, GARRAFA = 'Item_Ocarina_Fairy', 'Item_Ocarina_Time', 'Item_ZeldaLetter', 'Item_Bottle'
+T_GORON, T_ZORA, FLECHA_LUZ = 'Obj_Armor_Goron', 'Obj_Armor_Zora', 'Item_Arrow_Light'
 
 PROGRESSAO = [KOKIRI, SLING, BOOM, BOMBS, BOW, HOOK, LONG, HAMMER, HOVER, IRON, SILVER, GOLD, LENS, MIRROR,
-              MAGIA, DIN, CARTAO, BRACELETE] + MUSICAS
+              MAGIA, DIN, CARTAO, BRACELETE, OCARINA, OCARINA_T, CARTA, GARRAFA, T_GORON, T_ZORA,
+              FLECHA_LUZ] + MUSICAS
 # progressivos: o segundo so pode aparecer depois do primeiro (o Remake talvez nao faca upgrade)
 ORDEM = [(HOOK, LONG), (SILVER, GOLD), (MAGIA, MAGIA2)]
 
@@ -69,27 +72,27 @@ class Estado:
 def _eventos():
     E = {}
     E['ev:Crianca'] = lambda s: True
-    E['ev:Ocarina'] = lambda s: True                       # Saria na ponte
+    E['ev:Ocarina'] = lambda s: s.tem(OCARINA) or s.tem(OCARINA_T)
     # (ter a musica / o item: quem da e um LOCAL especial, em REGRAS)
     E['ev:CantigaZelda'] = lambda s: s.tem(ZL)
     E['ev:CancaoSaria'] = lambda s: s.tem(SARIA)
     E['ev:CancaoEpona'] = lambda s: s.tem(EPONA)
     E['ev:CancaoSol'] = lambda s: s.tem(SOL)
-    E['ev:Garrafa'] = lambda s: True                       # mulher das galinhas
+    E['ev:Garrafa'] = lambda s: s.tem(GARRAFA)
     E['ev:EscudoDeku'] = lambda s: ESCUDO_DEKU[0](s)       # loja (a vitrine muda com as lojas embaralhadas)
     E['ev:BraceleteGoron'] = lambda s: s.tem(BRACELETE)
     E['ev:Magia'] = lambda s: s.tem(MAGIA)
     E['ev:FogoDin'] = lambda s: s.tem(DIN)
     # pedras espirituais = terminar as 3 masmorras de crianca
     E['ev:Esmeralda'] = lambda s: s.tem(KOKIRI, SLING, 'ev:EscudoDeku')
-    E['ev:Rubi'] = lambda s: s.tem(BOMBS) and (s.tem(SLING) or s.tem(BOW)) and (s.forca(1) or s.tem(BOMBS))
+    E['ev:Rubi'] = lambda s: s.tem(CARTA, BOMBS) and (s.tem(SLING) or s.tem(BOW)) and (s.forca(1) or s.tem(BOMBS))
     E['ev:Safira'] = lambda s: s.tem('ev:CantigaZelda', 'ev:Garrafa', BOOM)
     # Espada Mestra: a Porta do Tempo pede a Cancao do Tempo
     E['ev:Adulto'] = lambda s: s.tem('ev:Esmeralda', 'ev:Rubi', 'ev:Safira', 'ev:Ocarina', TEMPO)
     E['ev:CancaoTempestade'] = lambda s: s.tem(TEMPEST)
-    E['ev:TunicaGoron'] = lambda s: s.tem('ev:Adulto') and (s.tem(BOMBS) or s.tem(BOW))
+    E['ev:TunicaGoron'] = lambda s: s.tem(T_GORON)
     E['ev:FogoAzul'] = lambda s: s.tem('ev:Adulto', 'ev:CantigaZelda', 'ev:Garrafa')
-    E['ev:TunicaZora'] = lambda s: s.tem('ev:FogoAzul')
+    E['ev:TunicaZora'] = lambda s: s.tem(T_ZORA)
     E['ev:CartaoGerudo'] = lambda s: s.tem(CARTAO)
     E['ev:Deserto'] = lambda s: s.tem('ev:CartaoGerudo', LENS, 'ev:Magia') and (s.tem(HOVER) or s.tem(LONG))
     # medalhoes = terminar os templos de adulto (mesmas regras dos baus de cada templo)
@@ -101,7 +104,7 @@ def _eventos():
     E['ev:MedSombra'] = lambda s: s.tem('ev:Noturno', 'ev:FogoDin', 'ev:Magia', LENS, HOVER, BOMBS, BOW) and s.hook()
     E['ev:MedEspirito'] = lambda s: (s.tem('ev:Requiem', SILVER, MIRROR, BOMBS, BOW, LENS, 'ev:CantigaZelda', 'ev:Magia')
                                      and s.hook())
-    E['ev:FlechaLuz'] = lambda s: s.tem('ev:MedSombra', 'ev:MedEspirito')
+    E['ev:FlechaLuz'] = lambda s: s.tem(FLECHA_LUZ)
     E['ev:Ponte'] = lambda s: s.tem('ev:MedSombra', 'ev:MedEspirito')
     # vitoria: ponte + todas as provas do castelo + flecha de luz
     E['ev:VITORIA'] = lambda s: (s.tem('ev:Ponte', 'ev:FlechaLuz', BOW, GOLD, HAMMER, LENS, MIRROR, BOMBS,
@@ -118,7 +121,7 @@ def regra_entrada(area, s):
     a = s.tem('ev:Adulto')
     return {
         'InsideTheDekuTree': lambda: s.tem(KOKIRI, 'ev:EscudoDeku'),
-        'DodongoCavern': lambda: s.forca(1) or s.tem(BOMBS),
+        'DodongoCavern': lambda: (s.forca(1) or s.tem(BOMBS)) and (s.tem(CARTA) or a),
         'InsideJabuJabuBelly': lambda: s.tem('ev:CantigaZelda', 'ev:Garrafa'),
         'BottomOfTheWell': lambda: s.tem('ev:CancaoTempestade', KOKIRI, 'ev:CantigaZelda'),
         'ForestTemple': lambda: a and s.hook(),
@@ -137,7 +140,7 @@ def regra_masmorra(area, s):
     a = s.tem('ev:Adulto')
     return {
         'InsideTheDekuTree': lambda: s.tem(KOKIRI, SLING, 'ev:EscudoDeku'),
-        'DodongoCavern': lambda: s.tem(BOMBS) and (s.tem(SLING) or s.tem(BOW)),
+        'DodongoCavern': lambda: s.tem(BOMBS) and (s.tem(SLING) or s.tem(BOW)) and (s.tem(CARTA) or a),
         'InsideJabuJabuBelly': lambda: s.tem('ev:CantigaZelda', 'ev:Garrafa', BOOM),
         'BottomOfTheWell': lambda: s.tem('ev:CancaoTempestade', KOKIRI, LENS, 'ev:Magia', BOMBS),
         'ForestTemple': lambda: a and s.tem(BOW) and s.hook(),
@@ -158,6 +161,8 @@ def regra_mundo(area, idade, s):
     if idade == 'Adult' and not s.tem('ev:Adulto'):
         return False
     bomba = s.tem(BOMBS) or (idade == 'Adult' and s.tem(HAMMER))
+    if area in ('DeathMountainTrail', 'DeathMountainCrater', 'GoronCity') and idade == 'Child' and not s.tem(CARTA):
+        return False   # (o guarda do portao de Kakariko pede a carta da Zelda)
     r = {
         'KokiriForest': lambda: True,
         'LostWood': lambda: bomba,
@@ -199,37 +204,44 @@ def _a(s):
 
 
 REGRAS = {
-    'musica_impa': lambda s: True,
+    'musica_impa': lambda s: s.tem('ev:Ocarina'),
     'musica_malon': lambda s: s.tem('ev:Ocarina'),
     'musica_saria': lambda s: s.tem('ev:Ocarina'),
-    'musica_tumba': lambda s: s.tem(ZL),
-    'musica_tempo': lambda s: s.tem('ev:Esmeralda', 'ev:Rubi', 'ev:Safira'),
+    'musica_tumba': lambda s: s.tem(ZL, 'ev:Ocarina'),
+    'musica_tempo': lambda s: s.tem('ev:Esmeralda', 'ev:Rubi', 'ev:Safira', 'ev:Ocarina'),
     'musica_moinho': lambda s: _a(s) and s.tem('ev:Ocarina'),
     'musica_minueto': lambda s: _a(s),
     'musica_bolero': lambda s: _a(s),
     'musica_serenata': lambda s: s.tem('ev:FogoAzul'),
-    'musica_requiem': lambda s: s.tem('ev:Requiem'),
+    'musica_requiem': lambda s: s.tem('ev:Requiem', 'ev:Ocarina'),
     'musica_noturno': lambda s: _a(s) and s.tem('ev:MedFloresta', 'ev:MedFogo', 'ev:MedAgua'),
     'musica_preludio': lambda s: _a(s) and s.tem('ev:MedFloresta'),
     'fada_din': lambda s: s.tem(ZL, BOMBS),
     'fada_farore': lambda s: s.tem(ZL, BOMBS),
     'fada_nayru': lambda s: s.tem('ev:Requiem', BOMBS),
-    'fada_poder': lambda s: s.tem(ZL) and (s.tem(BOMBS) or (_a(s) and s.tem(HAMMER))),
+    'fada_poder': lambda s: s.tem(ZL) and (s.tem(BOMBS, CARTA) or (_a(s) and s.tem(HAMMER))),
     'fada_sabedoria': lambda s: _a(s) and s.tem(GOLD, ZL),
     'fada_coragem': lambda s: _a(s) and s.tem(HAMMER, ZL),
-    'darunia': lambda s: s.tem(ZL, SARIA),
+    'darunia': lambda s: s.tem(ZL, SARIA, CARTA),
     'cartao_gerudo': lambda s: _a(s) and s.tem(BOW) and s.hook() and (s.tem(EPONA) or s.tem(LONG)),
     'coracao_telhado': lambda s: True,
     'coracao_skullkid': lambda s: s.tem(SARIA),
     'coracao_sapos': lambda s: s.tem(ZL, EPONA, SARIA, SOL, TEMPO, TEMPEST),
     'coracao_dampe': lambda s: True,
+    'saria_ocarina': lambda s: True,
+    'zelda_ocarina': lambda s: s.tem('ev:Esmeralda', 'ev:Rubi', 'ev:Safira'),
+    'zelda_carta': lambda s: True,
+    'zelda_flechas': lambda s: _a(s) and s.tem('ev:MedSombra', 'ev:MedEspirito'),
+    'anju_garrafa': lambda s: True,
+    'tunica_goron': lambda s: _a(s) and (s.tem(BOMBS) or s.tem(BOW)),
+    'tunica_zora': lambda s: s.tem('ev:FogoAzul'),
 }
 
 
 def acessivel(loc, s):
     """True se o local e alcancavel no estado s (o bau em alguma das idades dele; o especial pela sua regra)."""
     if loc.get('tipo') in ('musica', 'npc'):
-        return REGRAS[loc['chave']](s)
+        return REGRAS.get(loc['chave'], lambda s: True)(s)   # (os inseguros: so lixo, a regra nao importa)
     if loc['gyaml'].startswith('Obj_TBox_GlassTruth') and not s.tem(LENS, 'ev:Magia'):
         return False
     area = loc['area']
