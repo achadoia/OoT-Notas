@@ -1,5 +1,5 @@
 """Grava cenas (Banc) modificadas como mod LayeredFS do NS2-IA."""
-import os, sys, shutil, zstandard
+import os, sys, shutil, struct, zstandard
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tools'))
 sys.path.insert(0, os.path.dirname(__file__))
 import ootlib as L
@@ -63,7 +63,61 @@ class Cena:
         with open(dest, 'wb') as f:
             f.write(comp.compress(dados))
         assert B.plain(B.load(L.unzs(open(dest, 'rb').read()))[0]) == B.plain(self.root)
+        self.tamanhos = (len(L.unzs(self.raw)), len(dados))   # (descomprimidos: original, novo) para a RSTB
         return dest
+
+
+def tabela_de_tamanhos(base_zs, tamanhos, destino):
+    """A RSTB (System/Resource/ResourceSizeTable.*.rsizetable.zs: "RESTBL", u32 versao, u32 tamanho do nome, u32 entradas
+    por hash, u32 entradas por nome; por hash: u32 CRC-32 do caminho sem .zs, u32 tamanho) com as entradas das cenas
+    reescritas aumentadas: o motor DESCARTA um arquivo maior que a sua entrada (foi a tela preta do v1 no NS2-IA: as cenas
+    do bymlrw saem 10-20% maiores). tamanhos: {caminho romfs com .zs: (tamanho original, tamanho novo)}, descomprimidos.
+    Grava destino (zstd sem dicionario, que o jogo aceita) e devolve (entradas aumentadas, caminhos sem entrada)."""
+    import zlib
+    b = bytearray(L.unzs(open(base_zs, 'rb').read()))
+    if b[:6] != b'RESTBL':
+        raise SystemExit(f'{base_zs} nao e uma RESTBL')
+    nome_len, n_hash, n_nome = struct.unpack_from('<III', b, 10)
+    quer = {}
+    for rel, (antes, depois) in tamanhos.items():
+        if depois > antes:
+            chave = rel[:-3] if rel.endswith('.zs') else rel
+            quer[zlib.crc32(chave.encode())] = (chave, depois - antes)
+    subiu = 0
+    for i in range(n_hash):
+        at = 22 + 8 * i
+        h, tam = struct.unpack_from('<II', b, at)
+        if h in quer:   # (o que cresceu + 4 KB de folga; a entrada ja tem a folga do motor sobre o original)
+            struct.pack_into('<I', b, at + 4, tam + quer.pop(h)[1] + 0x1000)
+            subiu += 1
+    base_nomes = 22 + 8 * n_hash
+    for i in range(n_nome):
+        at = base_nomes + (nome_len + 4) * i
+        nome = bytes(b[at:at + nome_len]).split(b'\0')[0].decode('utf-8', 'replace')
+        h = zlib.crc32(nome.encode())
+        if h in quer and quer[h][0] == nome:
+            tam, = struct.unpack_from('<I', b, at + nome_len)
+            struct.pack_into('<I', b, at + nome_len, tam + quer.pop(h)[1] + 0x1000)
+            subiu += 1
+    os.makedirs(os.path.dirname(destino) or '.', exist_ok=True)
+    with open(destino, 'wb') as f:
+        f.write(zstandard.ZstdCompressor(level=16).compress(bytes(b)))
+    return subiu, [v[0] for v in quer.values()]
+
+
+def rstb_do_jogo():
+    """a RSTB a usar de base: a do Hookshot (prompts\\rsizetable.zs: a do jogo com a fonte dos botoes aumentada), senao a
+    do proprio jogo"""
+    hs = r'D:\hookshot\prompts\rsizetable.zs'
+    if os.path.isfile(hs):
+        return hs
+    for d in L.ROMFS_DIRS:
+        pasta = os.path.join(d, 'System', 'Resource')
+        if os.path.isdir(pasta):
+            for n in sorted(os.listdir(pasta)):
+                if n.startswith('ResourceSizeTable.') and n.endswith('.rsizetable.zs'):
+                    return os.path.join(pasta, n)
+    return None
 
 
 def limpar_mod(nome):

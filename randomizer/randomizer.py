@@ -179,19 +179,36 @@ def spoiler(seed, locais, colocados, pasta):
     return len(sph)
 
 
-def gravar_mod(locais, colocados, nome_mod='Randomizer', seed=''):
+def gravar_mod(locais, colocados, nome_mod='Randomizer', seed='', saida=None, rstb=None):
+    """saida: a pasta do Hookshot (D:\\hookshot\\zelda\\randomizer.novo): saida\\romfs + saida\\rsizetable.zs; sem ela, o mod
+    LayeredFS do emulador (pausado)"""
     import modfs as M
     por_arquivo = {}
     for i, l in enumerate(locais):
         if colocados[i] != l['item']:
             for rel in l['arquivos']:
                 por_arquivo.setdefault(rel, {})[l['hash']] = colocados[i]
-    mod = M.limpar_mod(nome_mod)
+    if saida:
+        if os.path.isdir(saida):
+            import shutil
+            shutil.rmtree(saida)
+        os.makedirs(saida)
+        mod = saida
+    else:
+        mod = M.limpar_mod(nome_mod)
+    tamanhos = {}
     for rel, trocas in sorted(por_arquivo.items()):
         c = M.Cena(rel)
         for h, item in trocas.items():
             c.trocar_drop(h, item)
         c.gravar(mod)
+        tamanhos[c.rel] = c.tamanhos
+    base = rstb or M.rstb_do_jogo()
+    if base:
+        subiu, sem = M.tabela_de_tamanhos(base, tamanhos, os.path.join(mod, 'rsizetable.zs'))
+        print(f'rstb: {subiu} entradas aumentadas (base {base})' + (f'; sem entrada: {sem}' if sem else ''))
+    else:
+        print('rstb: AVISO sem tabela base: cenas maiores podem ser descartadas pelo jogo')
     open(os.path.join(mod, 'seed.txt'), 'w', encoding='utf-8').write(seed + '\n')
     return mod, len(por_arquivo)
 
@@ -201,6 +218,8 @@ def main():
     ap.add_argument('--seed', default=None)
     ap.add_argument('--sem-mod', action='store_true')
     ap.add_argument('--vanilla', action='store_true', help='testa a logica com tudo no lugar original')
+    ap.add_argument('--saida', help='pasta do Hookshot (romfs + rsizetable.zs + spoiler), em vez do mod do emulador')
+    ap.add_argument('--rstb', help='a RSTB base (padrao: a do Hookshot, senao a do jogo)')
     a = ap.parse_args()
     seed = a.seed or time.strftime('%Y%m%d-%H%M%S')
     locais, fixos, colocados, tent = gerar(seed, vanilla=a.vanilla)
@@ -216,8 +235,13 @@ def main():
     print(f'seed {seed}: {len(locais)} baus embaralhados ({len(fixos)} fixos), tentativa {tent}, {n} esferas')
     print('spoiler:', os.path.join(pasta, 'spoiler.txt'))
     if not a.sem_mod:
-        mod, narq = gravar_mod(locais, colocados, seed=seed)
+        mod, narq = gravar_mod(locais, colocados, seed=seed, saida=a.saida, rstb=a.rstb)
+        if a.saida:   # (o spoiler junto, para o jogador consultar se travar)
+            import shutil
+            for f in ('spoiler.txt', 'spoiler.json'):
+                shutil.copy2(os.path.join(pasta, f), os.path.join(mod, f))
         print(f'mod: {mod} ({narq} arquivos de cena)')
+        print('@@ok', seed)
 
 
 if __name__ == '__main__':

@@ -6,6 +6,14 @@ ROMFS_DIRS = []  # update primeiro, base depois
 
 def set_game(root):
     ROMFS_DIRS.clear()
+    # OOT_ROMFS=<pasta romfs solta> (ex.: D:\hookshot\romfs, a versao nativa de PC) tem prioridade; tambem e o que se
+    # usa quando o dump base/updates nao existe mais
+    solta = os.environ.get('OOT_ROMFS') or ''
+    if not solta and not os.path.isdir(os.path.join(root, 'base')) and os.path.isdir(r'D:\hookshot\romfs'):
+        solta = r'D:\hookshot\romfs'
+    if solta and os.path.isdir(solta):
+        ROMFS_DIRS.append(solta)
+        return
     upd = os.path.join(root, 'updates')
     if os.path.isdir(upd):
         for v in sorted(os.listdir(upd), key=lambda s: -int(s) if s.isdigit() else 0):
