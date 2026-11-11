@@ -17,10 +17,7 @@ import logica as G
 DATA = r'D:\OoT-Notas\data'
 
 EXCLUIR_ITENS = {'Item_Dungeon_SmallKey', 'Item_Dungeon_BossKey', 'Item_Dungeon_Map', 'Item_Dungeon_Compass',
-                 'Item_ScrubBusinessSeed', 'Obj_MiniGame_SmallKey',
-                 # a Espada Kokiri fica no bau dela (Floresta Kokiri, aberto desde o inicio): sem espada equipada o Remake
-                 # nao deixa usar a bomba (o Link levanta e guarda), visto na seed 20261111-121010
-                 'Item_Sword_Kokiri'}
+                 'Item_ScrubBusinessSeed', 'Obj_MiniGame_SmallKey'}
 EXCLUIR_AREAS = {'DreamWorld'}
 
 NOMES = {

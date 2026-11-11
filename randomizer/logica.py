@@ -58,7 +58,6 @@ def _eventos():
     E = {}
     E['ev:Crianca'] = lambda s: True
     E['ev:Ocarina'] = lambda s: True                       # Saria na ponte
-    E[KOKIRI] = lambda s: True                             # bau original na Floresta Kokiri (fixo: randomizer.EXCLUIR_ITENS)
     E['ev:CantigaZelda'] = lambda s: True                  # castelo (crianca)
     E['ev:CancaoSaria'] = lambda s: s.tem('ev:Ocarina')
     E['ev:CancaoEpona'] = lambda s: s.tem('ev:Ocarina')
