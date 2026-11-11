@@ -5,8 +5,9 @@ de acesso por idade. Em masmorras a regra e CONSERVADORA: qualquer bau exige tud
 jogo original exige para terminar a masmorra (entrada + itens usados la dentro). Assim o
 gerador nunca pressupoe um caminho que talvez nao exista no layout do Remake.
 
-Recompensas de NPC/historia (musicas, ocarina, garrafa, magia, tunicas, pedras, medalhoes)
-continuam no lugar original e entram como EVENTOS.
+Musicas e as recompensas dos NPCs escolhidos (fadas, Darunia, cartao Gerudo, pecas de coracao) sao ITENS dados por
+LOCAIS especiais (REGRAS: tipo 'musica' ou 'npc'); embaralhados ou nao, a logica ve quem tem o que. O resto da
+historia (ocarina, garrafa, tunicas, pedras, medalhoes) continua como EVENTOS.
 """
 
 # ---- itens que o randomizer embaralha e que a logica usa ----
@@ -25,9 +26,20 @@ GOLD = 'Item_Gauntlet_Gold'
 LENS = 'Item_GlassTruth'
 MIRROR = 'Item_Shield_Mirror'
 
-PROGRESSAO = [KOKIRI, SLING, BOOM, BOMBS, BOW, HOOK, LONG, HAMMER, HOVER, IRON, SILVER, GOLD, LENS, MIRROR]
+# musicas (o nome no inventario = o ator)
+ZL, EPONA, SARIA, SOL = 'Item_Melody_ZeldaLullaby', 'Item_Melody_EponaSong', 'Item_Melody_SariaSong', 'Item_Melody_SunSong'
+TEMPO, TEMPEST = 'Item_Melody_TimeSong', 'Item_Melody_StormSong'
+MINUETO, BOLERO, SERENATA = 'Item_Melody_ForestMinuet', 'Item_Melody_FireBolero', 'Item_Melody_WaterSerenade'
+REQUIEM, NOTURNO, PRELUDIO = 'Item_Melody_SpiritRequiem', 'Item_Melody_ShadowNocturne', 'Item_Melody_LightPrelude'
+MUSICAS = [ZL, EPONA, SARIA, SOL, TEMPO, TEMPEST, MINUETO, BOLERO, SERENATA, REQUIEM, NOTURNO, PRELUDIO]
+# recompensas de NPC que a logica usa
+MAGIA, MAGIA2, DIN = 'Item_FairyBless_MP', 'Item_FairyBless_MPDouble', 'Item_DinFire'
+CARTAO, BRACELETE = 'Item_Token_Gerudo', 'Item_Gauntlet_Goron'
+
+PROGRESSAO = [KOKIRI, SLING, BOOM, BOMBS, BOW, HOOK, LONG, HAMMER, HOVER, IRON, SILVER, GOLD, LENS, MIRROR,
+              MAGIA, DIN, CARTAO, BRACELETE] + MUSICAS
 # progressivos: o segundo so pode aparecer depois do primeiro (o Remake talvez nao faca upgrade)
-ORDEM = [(HOOK, LONG), (SILVER, GOLD)]
+ORDEM = [(HOOK, LONG), (SILVER, GOLD), (MAGIA, MAGIA2)]
 
 # ---- areas de masmorra -> idade em que se entra ----
 MASMORRA_IDADE = {
@@ -49,7 +61,7 @@ class Estado:
         return HOOK in self.i or LONG in self.i
 
     def forca(self, n):  # 1 bracelete (evento), 2 prata, 3 ouro
-        nivel = 3 if GOLD in self.i else 2 if SILVER in self.i else 1 if 'ev:BraceleteGoron' in self.i else 0
+        nivel = 3 if GOLD in self.i else 2 if SILVER in self.i else 1 if BRACELETE in self.i else 0
         return nivel >= n
 
 
@@ -58,32 +70,34 @@ def _eventos():
     E = {}
     E['ev:Crianca'] = lambda s: True
     E['ev:Ocarina'] = lambda s: True                       # Saria na ponte
-    E['ev:CantigaZelda'] = lambda s: True                  # castelo (crianca)
-    E['ev:CancaoSaria'] = lambda s: s.tem('ev:Ocarina')
-    E['ev:CancaoEpona'] = lambda s: s.tem('ev:Ocarina')
-    E['ev:CancaoSol'] = lambda s: s.tem('ev:CantigaZelda')
+    # (ter a musica / o item: quem da e um LOCAL especial, em REGRAS)
+    E['ev:CantigaZelda'] = lambda s: s.tem(ZL)
+    E['ev:CancaoSaria'] = lambda s: s.tem(SARIA)
+    E['ev:CancaoEpona'] = lambda s: s.tem(EPONA)
+    E['ev:CancaoSol'] = lambda s: s.tem(SOL)
     E['ev:Garrafa'] = lambda s: True                       # mulher das galinhas
-    E['ev:EscudoDeku'] = lambda s: True                    # loja
-    E['ev:BraceleteGoron'] = lambda s: s.tem('ev:CantigaZelda', 'ev:CancaoSaria')
-    E['ev:Magia'] = lambda s: s.tem('ev:CantigaZelda') and (s.tem(BOMBS) or (s.tem('ev:Adulto', HAMMER)))
-    E['ev:FogoDin'] = lambda s: s.tem('ev:CantigaZelda', BOMBS)
+    E['ev:EscudoDeku'] = lambda s: ESCUDO_DEKU[0](s)       # loja (a vitrine muda com as lojas embaralhadas)
+    E['ev:BraceleteGoron'] = lambda s: s.tem(BRACELETE)
+    E['ev:Magia'] = lambda s: s.tem(MAGIA)
+    E['ev:FogoDin'] = lambda s: s.tem(DIN)
     # pedras espirituais = terminar as 3 masmorras de crianca
     E['ev:Esmeralda'] = lambda s: s.tem(KOKIRI, SLING, 'ev:EscudoDeku')
     E['ev:Rubi'] = lambda s: s.tem(BOMBS) and (s.tem(SLING) or s.tem(BOW)) and (s.forca(1) or s.tem(BOMBS))
     E['ev:Safira'] = lambda s: s.tem('ev:CantigaZelda', 'ev:Garrafa', BOOM)
-    E['ev:Adulto'] = lambda s: s.tem('ev:Esmeralda', 'ev:Rubi', 'ev:Safira', 'ev:Ocarina')  # Espada Mestra
-    E['ev:CancaoTempestade'] = lambda s: s.tem('ev:Adulto', 'ev:Ocarina')
+    # Espada Mestra: a Porta do Tempo pede a Cancao do Tempo
+    E['ev:Adulto'] = lambda s: s.tem('ev:Esmeralda', 'ev:Rubi', 'ev:Safira', 'ev:Ocarina', TEMPO)
+    E['ev:CancaoTempestade'] = lambda s: s.tem(TEMPEST)
     E['ev:TunicaGoron'] = lambda s: s.tem('ev:Adulto') and (s.tem(BOMBS) or s.tem(BOW))
     E['ev:FogoAzul'] = lambda s: s.tem('ev:Adulto', 'ev:CantigaZelda', 'ev:Garrafa')
     E['ev:TunicaZora'] = lambda s: s.tem('ev:FogoAzul')
-    E['ev:CartaoGerudo'] = lambda s: s.tem('ev:Adulto', BOW) and s.hook()
+    E['ev:CartaoGerudo'] = lambda s: s.tem(CARTAO)
     E['ev:Deserto'] = lambda s: s.tem('ev:CartaoGerudo', LENS, 'ev:Magia') and (s.tem(HOVER) or s.tem(LONG))
     # medalhoes = terminar os templos de adulto (mesmas regras dos baus de cada templo)
     E['ev:MedFloresta'] = lambda s: s.tem('ev:Adulto', BOW) and s.hook()
     E['ev:MedFogo'] = lambda s: s.tem('ev:TunicaGoron', HAMMER, BOMBS)
     E['ev:MedAgua'] = lambda s: s.tem('ev:TunicaZora', IRON, LONG, BOW, 'ev:CantigaZelda')
-    E['ev:Noturno'] = lambda s: s.tem('ev:MedFloresta', 'ev:MedFogo', 'ev:MedAgua')
-    E['ev:Requiem'] = lambda s: s.tem('ev:Deserto')
+    E['ev:Noturno'] = lambda s: s.tem(NOTURNO)
+    E['ev:Requiem'] = lambda s: s.tem(REQUIEM) or s.tem('ev:Deserto')   # (chegar ao Colosso)
     E['ev:MedSombra'] = lambda s: s.tem('ev:Noturno', 'ev:FogoDin', 'ev:Magia', LENS, HOVER, BOMBS, BOW) and s.hook()
     E['ev:MedEspirito'] = lambda s: (s.tem('ev:Requiem', SILVER, MIRROR, BOMBS, BOW, LENS, 'ev:CantigaZelda', 'ev:Magia')
                                      and s.hook())
@@ -176,8 +190,46 @@ ESPECIAIS = {
 }
 
 
+ESCUDO_DEKU = [lambda s: True]   # (randomizer.py troca quando as lojas sao embaralhadas)
+
+
+# ---- locais especiais: quem ensina as musicas e os NPCs que dao itens (randomizer.py ESPECIAIS) ----
+def _a(s):
+    return s.tem('ev:Adulto')
+
+
+REGRAS = {
+    'musica_impa': lambda s: True,
+    'musica_malon': lambda s: s.tem('ev:Ocarina'),
+    'musica_saria': lambda s: s.tem('ev:Ocarina'),
+    'musica_tumba': lambda s: s.tem(ZL),
+    'musica_tempo': lambda s: s.tem('ev:Esmeralda', 'ev:Rubi', 'ev:Safira'),
+    'musica_moinho': lambda s: _a(s) and s.tem('ev:Ocarina'),
+    'musica_minueto': lambda s: _a(s),
+    'musica_bolero': lambda s: _a(s),
+    'musica_serenata': lambda s: s.tem('ev:FogoAzul'),
+    'musica_requiem': lambda s: s.tem('ev:Requiem'),
+    'musica_noturno': lambda s: _a(s) and s.tem('ev:MedFloresta', 'ev:MedFogo', 'ev:MedAgua'),
+    'musica_preludio': lambda s: _a(s) and s.tem('ev:MedFloresta'),
+    'fada_din': lambda s: s.tem(ZL, BOMBS),
+    'fada_farore': lambda s: s.tem(ZL, BOMBS),
+    'fada_nayru': lambda s: s.tem('ev:Requiem', BOMBS),
+    'fada_poder': lambda s: s.tem(ZL) and (s.tem(BOMBS) or (_a(s) and s.tem(HAMMER))),
+    'fada_sabedoria': lambda s: _a(s) and s.tem(GOLD, ZL),
+    'fada_coragem': lambda s: _a(s) and s.tem(HAMMER, ZL),
+    'darunia': lambda s: s.tem(ZL, SARIA),
+    'cartao_gerudo': lambda s: _a(s) and s.tem(BOW) and s.hook() and (s.tem(EPONA) or s.tem(LONG)),
+    'coracao_telhado': lambda s: True,
+    'coracao_skullkid': lambda s: s.tem(SARIA),
+    'coracao_sapos': lambda s: s.tem(ZL, EPONA, SARIA, SOL, TEMPO, TEMPEST),
+    'coracao_dampe': lambda s: True,
+}
+
+
 def acessivel(loc, s):
-    """True se o bau e alcancavel no estado s (em alguma das idades dele)."""
+    """True se o local e alcancavel no estado s (o bau em alguma das idades dele; o especial pela sua regra)."""
+    if loc.get('tipo') in ('musica', 'npc'):
+        return REGRAS[loc['chave']](s)
     if loc['gyaml'].startswith('Obj_TBox_GlassTruth') and not s.tem(LENS, 'ev:Magia'):
         return False
     area = loc['area']

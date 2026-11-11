@@ -13,6 +13,7 @@ Algoritmo (mesmo desenho do SoH, codigo proprio):
 import os, sys, json, random, hashlib, argparse, time
 sys.path.insert(0, os.path.dirname(__file__))
 import logica as G
+import especiais as X
 
 DATA = r'D:\OoT-Notas\data'
 
@@ -50,10 +51,12 @@ AREAS = {
 
 
 def nome_item(i):
-    return NOMES.get(i, i)
+    return NOMES.get(i) or X.NOMES.get(i, i)
 
 
 def nome_local(loc):
+    if loc.get('tipo') in ('musica', 'npc'):
+        return loc['nome']
     sala = f" sala {loc['sala']}" if loc.get('sala') is not None else ''
     return f"{AREAS.get(loc['area'], loc['area'])}{sala} #{str(loc['hash'])[-5:]}"
 
@@ -65,7 +68,7 @@ def carregar_locais():
         excl = (l['repetivel'] or l['area'] in EXCLUIR_AREAS or l['item'] in EXCLUIR_ITENS
                 or l['gyaml'].startswith(('Obj_TBox_A_06', 'Obj_HrlCity_Shop')))
         (fixos if excl else usar).append(l)
-    return usar, fixos
+    return usar + X.locais(), fixos   # (+ quem ensina musicas e os NPCs que dao itens: sempre na logica)
 
 
 def alcance(locais, colocados, assumidos):
@@ -116,21 +119,30 @@ def esferas(locais, colocados):
     return out, s, pegos
 
 
-GRUPOS = {   # (o que o jogador escolhe embaralhar: --embaralhar, o menu do jogo; os outros baus ficam com o item original)
-    'masmorras': lambda l: l['area'] in G.MASMORRA_IDADE,
-    'mundo': lambda l: l['area'] not in G.MASMORRA_IDADE,
+GRUPOS = {   # (o que o jogador escolhe embaralhar: --embaralhar, o menu do jogo; o resto fica com o item original)
+    'masmorras': lambda l: not l.get('tipo') and l['area'] in G.MASMORRA_IDADE,
+    'mundo': lambda l: not l.get('tipo') and l['area'] not in G.MASMORRA_IDADE,
+    'npcs': lambda l: l.get('tipo') == 'npc',
+    'musicas': lambda l: l.get('tipo') == 'musica',
+    'lojas': lambda l: False,   # (as vitrines: especiais.embaralhar_lojas)
 }
 
 
-def gerar(seed, vanilla=False, tentativas=50, grupos=('masmorras', 'mundo')):
+def gerar(seed, vanilla=False, tentativas=300, grupos=('masmorras', 'mundo')):
+    """devolve (locais, fixos, colocados, tentativa, lojas): lojas = (vitrines, gyaml novo de cada uma) ou None"""
     locais, fixos = carregar_locais()
     entra = [any(GRUPOS[g](l) for g in grupos) for l in locais]
     base = {i: l['item'] for i, l in enumerate(locais) if not entra[i]}   # (fora da escolha: o item original, na logica)
     pool = [l['item'] for i, l in enumerate(locais) if entra[i]]
+    rng = random.Random(hashlib.sha256(seed.encode()).digest())
+    lojas = None
+    G.ESCUDO_DEKU[0] = lambda s: True
+    if 'lojas' in grupos and not vanilla:
+        lojas = X.embaralhar_lojas(rng)
+        G.ESCUDO_DEKU[0] = X.regra_escudo_deku(*lojas)
     if vanilla:
         colocados = {i: l['item'] for i, l in enumerate(locais)}
-        return locais, fixos, colocados, 0
-    rng = random.Random(hashlib.sha256(seed.encode()).digest())
+        return locais, fixos, colocados, 0, None
     prog = [x for x in pool if x in G.PROGRESSAO]
     resto = [x for x in pool if x not in G.PROGRESSAO]
     for tentativa in range(1, tentativas + 1):
@@ -141,18 +153,26 @@ def gerar(seed, vanilla=False, tentativas=50, grupos=('masmorras', 'mundo')):
         while a_colocar:
             item = a_colocar.pop()
             _, alc = alcance(locais, colocados, a_colocar)
-            vazios = [i for i in alc if i not in colocados]
+            vazios = [i for i in alc if i not in colocados and X.pode(locais[i], item)]
             if not vazios:
                 ok = False
                 break
             colocados[rng.choice(vazios)] = item
         if not ok:
             continue
+        # o resto: primeiro os locais com menos opcoes (os que pedem flag IsGet), depois os outros
         vazios = [i for i in range(len(locais)) if i not in colocados]
         r = resto[:]
         rng.shuffle(r)
-        for i, item in zip(vazios, r):
-            colocados[i] = item
+        vazios.sort(key=lambda i: (sum(X.pode(locais[i], it) for it in set(r)), rng.random()))
+        for i in vazios:
+            k = next((k for k, it in enumerate(r) if X.pode(locais[i], it)), None)
+            if k is None:
+                ok = False
+                break
+            colocados[i] = r.pop(k)
+        if not ok or r:
+            continue
         # verificacao final
         sph, s, pegos = esferas(locais, colocados)
         if len(pegos) != len(locais) or 'ev:VITORIA' not in s.i:
@@ -160,24 +180,36 @@ def gerar(seed, vanilla=False, tentativas=50, grupos=('masmorras', 'mundo')):
         esfera_de = {colocados[i]: n for n, grupo in enumerate(sph) for i in grupo}
         if any(esfera_de.get(a, 99) >= esfera_de.get(b, -1) for a, b in G.ORDEM):
             continue
-        return locais, fixos, colocados, tentativa
+        return locais, fixos, colocados, tentativa, lojas
     raise RuntimeError('nao achei uma distribuicao valida em %d tentativas' % tentativas)
 
 
-def spoiler(seed, locais, colocados, pasta):
+def spoiler(seed, locais, colocados, pasta, lojas=None):
     sph, s, _ = esferas(locais, colocados)
     linhas = [f'NS2-IA Randomizer - seed "{seed}"', f'gerado {time.strftime("%Y-%m-%d %H:%M")}', '',
               '== Caminho (esferas: o que da para pegar com o que ja se tem) ==']
     js = {'seed': seed, 'esferas': [], 'locais': {}}
     for n, grupo in enumerate(sph):
-        prog = [i for i in grupo if colocados[i] in G.PROGRESSAO or colocados[i] == 'Item_Arrow_Ice']
+        prog = [i for i in grupo if colocados[i] in G.PROGRESSAO or colocados[i] in X.NOMES or colocados[i] == 'Item_Arrow_Ice']
         js['esferas'].append({nome_local(locais[i]): nome_item(colocados[i]) for i in grupo})
         if prog:
             linhas.append(f'Esfera {n}:')
             for i in prog:
                 linhas.append(f'  {nome_local(locais[i]):45s} -> {nome_item(colocados[i])}')
+    linhas += ['', '== Musicas e NPCs ==']
+    for i, l in enumerate(locais):
+        if l.get('tipo'):
+            linhas.append(f'  {nome_local(l):45s} -> {nome_item(colocados[i]):20s} (original: {nome_item(l["item"])})')
+            js['locais'][l['chave']] = {'local': nome_local(l), 'item': colocados[i], 'original': l['item']}
+    if lojas:
+        linhas += ['', '== Lojas ==']
+        js['lojas'] = {}
+        for v, novo in zip(*lojas):
+            linhas.append(f'  {X.nome_vitrine(v):45s} -> {novo:28s} (original: {v["gyaml"]})')
+            js['lojas'][X.nome_vitrine(v)] = {'item': novo, 'original': v['gyaml']}
     linhas += ['', '== Todos os baus ==']
-    for i, l in sorted(enumerate(locais), key=lambda x: (x[1]['area'], x[1].get('sala') or 0)):
+    for i, l in sorted(((i, l) for i, l in enumerate(locais) if not l.get('tipo')),
+                       key=lambda x: (x[1]['area'], x[1].get('sala') or 0)):
         orig = nome_item(l['item'])
         linhas.append(f'  {nome_local(l):45s} -> {nome_item(colocados[i]):20s} (original: {orig})')
         js['locais'][str(l['hash'])] = {'local': nome_local(l), 'item': colocados[i], 'original': l['item']}
@@ -187,7 +219,7 @@ def spoiler(seed, locais, colocados, pasta):
     return len(sph)
 
 
-def gravar_mod(locais, colocados, nome_mod='Randomizer', seed='', saida=None, rstb=None, grupos=None):
+def gravar_mod(locais, colocados, nome_mod='Randomizer', seed='', saida=None, rstb=None, grupos=None, lojas=None):
     """saida: a pasta do Hookshot (D:\\hookshot\\zelda\\randomizer.novo): saida\\romfs + saida\\rsizetable.zs; sem ela, o mod
     LayeredFS do emulador (pausado)"""
     import modfs as M
@@ -205,12 +237,32 @@ def gravar_mod(locais, colocados, nome_mod='Randomizer', seed='', saida=None, rs
     else:
         mod = M.limpar_mod(nome_mod)
     tamanhos = {}
+    cenas = {}   # (uma Cena por arquivo: baus e vitrines podem estar na mesma cena)
+
+    def cena(rel):
+        if rel not in cenas:
+            cenas[rel] = M.Cena(rel)
+        return cenas[rel]
     for rel, trocas in sorted(por_arquivo.items()):
-        c = M.Cena(rel)
+        c = cena(rel)
         for h, item in trocas.items():
             c.trocar_drop(h, item)
+    if lojas:
+        n_vit = 0
+        for v, novo in zip(*lojas):
+            if novo != v['gyaml']:
+                n_vit += 1
+                for rel, h in v['copias']:
+                    cena(rel).ator(h)[1]['Gyaml'] = (0xA0, novo)
+        print(f'lojas: {n_vit} vitrines trocadas')
+    for rel in sorted(cenas):
+        c = cenas[rel]
         c.gravar(mod)
         tamanhos[c.rel] = c.tamanhos
+    ed = X.edicoes_de_fluxo(locais, colocados)
+    if ed:
+        tamanhos.update(X.gravar_fluxos(ed, mod))
+        print(f'fluxos de evento: {len(ed)} ({", ".join(sorted(ed))})')
     print(f'cutscenes: {M.liberar_cutscenes(mod)} liberadas para pular (abertura, creditos)')
     base = rstb or M.rstb_do_jogo()
     if base:
@@ -221,7 +273,7 @@ def gravar_mod(locais, colocados, nome_mod='Randomizer', seed='', saida=None, rs
     open(os.path.join(mod, 'seed.txt'), 'w', encoding='utf-8').write(seed + '\n')
     if grupos:   # (o menu do jogo mostra o que esta seed embaralhou)
         open(os.path.join(mod, 'embaralhar.txt'), 'w', encoding='utf-8').write(','.join(grupos) + '\n')
-    return mod, len(por_arquivo)
+    return mod, len(cenas)
 
 
 def main():
@@ -239,7 +291,7 @@ def main():
     if ruins or not grupos:
         raise SystemExit(f'--embaralhar: escolha entre {", ".join(GRUPOS)} (veio {a.embaralhar!r})')
     seed = a.seed or time.strftime('%Y%m%d-%H%M%S')
-    locais, fixos, colocados, tent = gerar(seed, vanilla=a.vanilla, grupos=grupos)
+    locais, fixos, colocados, tent, lojas = gerar(seed, vanilla=a.vanilla, grupos=grupos)
     if a.vanilla:
         sph, s, pegos = esferas(locais, colocados)
         print(f'vanilla: {len(pegos)}/{len(locais)} baus alcancaveis, vitoria={"ev:VITORIA" in s.i}, {len(sph)} esferas')
@@ -248,13 +300,13 @@ def main():
                 print('  inalcancavel:', nome_local(l), l['item'])
         return
     pasta = os.path.join(DATA, 'rando', seed)
-    n = spoiler(seed, locais, colocados, pasta)
+    n = spoiler(seed, locais, colocados, pasta, lojas)
     nemb = sum(1 for l in locais if any(GRUPOS[g](l) for g in grupos))
-    print(f'seed {seed} ({",".join(grupos)}): {nemb} baus embaralhados ({len(fixos) + len(locais) - nemb} fixos), '
-          f'tentativa {tent}, {n} esferas')
+    print(f'seed {seed} ({",".join(grupos)}): {nemb} locais embaralhados ({len(fixos) + len(locais) - nemb} fixos)'
+          f'{", lojas" if lojas else ""}, tentativa {tent}, {n} esferas')
     print('spoiler:', os.path.join(pasta, 'spoiler.txt'))
     if not a.sem_mod:
-        mod, narq = gravar_mod(locais, colocados, seed=seed, saida=a.saida, rstb=a.rstb, grupos=grupos)
+        mod, narq = gravar_mod(locais, colocados, seed=seed, saida=a.saida, rstb=a.rstb, grupos=grupos, lojas=lojas)
         if a.saida:   # (o spoiler junto, para o jogador consultar se travar)
             import shutil
             for f in ('spoiler.txt', 'spoiler.json'):
