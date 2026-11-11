@@ -116,9 +116,17 @@ def esferas(locais, colocados):
     return out, s, pegos
 
 
-def gerar(seed, vanilla=False, tentativas=50):
+GRUPOS = {   # (o que o jogador escolhe embaralhar: --embaralhar, o menu do jogo; os outros baus ficam com o item original)
+    'masmorras': lambda l: l['area'] in G.MASMORRA_IDADE,
+    'mundo': lambda l: l['area'] not in G.MASMORRA_IDADE,
+}
+
+
+def gerar(seed, vanilla=False, tentativas=50, grupos=('masmorras', 'mundo')):
     locais, fixos = carregar_locais()
-    pool = [l['item'] for l in locais]
+    entra = [any(GRUPOS[g](l) for g in grupos) for l in locais]
+    base = {i: l['item'] for i, l in enumerate(locais) if not entra[i]}   # (fora da escolha: o item original, na logica)
+    pool = [l['item'] for i, l in enumerate(locais) if entra[i]]
     if vanilla:
         colocados = {i: l['item'] for i, l in enumerate(locais)}
         return locais, fixos, colocados, 0
@@ -126,7 +134,7 @@ def gerar(seed, vanilla=False, tentativas=50):
     prog = [x for x in pool if x in G.PROGRESSAO]
     resto = [x for x in pool if x not in G.PROGRESSAO]
     for tentativa in range(1, tentativas + 1):
-        colocados = {}
+        colocados = dict(base)
         a_colocar = prog[:]
         rng.shuffle(a_colocar)
         ok = True
@@ -179,7 +187,7 @@ def spoiler(seed, locais, colocados, pasta):
     return len(sph)
 
 
-def gravar_mod(locais, colocados, nome_mod='Randomizer', seed='', saida=None, rstb=None):
+def gravar_mod(locais, colocados, nome_mod='Randomizer', seed='', saida=None, rstb=None, grupos=None):
     """saida: a pasta do Hookshot (D:\\hookshot\\zelda\\randomizer.novo): saida\\romfs + saida\\rsizetable.zs; sem ela, o mod
     LayeredFS do emulador (pausado)"""
     import modfs as M
@@ -211,6 +219,8 @@ def gravar_mod(locais, colocados, nome_mod='Randomizer', seed='', saida=None, rs
     else:
         print('rstb: AVISO sem tabela base: cenas maiores podem ser descartadas pelo jogo')
     open(os.path.join(mod, 'seed.txt'), 'w', encoding='utf-8').write(seed + '\n')
+    if grupos:   # (o menu do jogo mostra o que esta seed embaralhou)
+        open(os.path.join(mod, 'embaralhar.txt'), 'w', encoding='utf-8').write(','.join(grupos) + '\n')
     return mod, len(por_arquivo)
 
 
@@ -221,9 +231,15 @@ def main():
     ap.add_argument('--vanilla', action='store_true', help='testa a logica com tudo no lugar original')
     ap.add_argument('--saida', help='pasta do Hookshot (romfs + rsizetable.zs + spoiler), em vez do mod do emulador')
     ap.add_argument('--rstb', help='a RSTB base (padrao: a do Hookshot, senao a do jogo)')
+    ap.add_argument('--embaralhar', default='masmorras,mundo',
+                    help='o que embaralhar, separado por virgula: ' + ', '.join(GRUPOS))
     a = ap.parse_args()
+    grupos = [g for g in a.embaralhar.split(',') if g]
+    ruins = [g for g in grupos if g not in GRUPOS]
+    if ruins or not grupos:
+        raise SystemExit(f'--embaralhar: escolha entre {", ".join(GRUPOS)} (veio {a.embaralhar!r})')
     seed = a.seed or time.strftime('%Y%m%d-%H%M%S')
-    locais, fixos, colocados, tent = gerar(seed, vanilla=a.vanilla)
+    locais, fixos, colocados, tent = gerar(seed, vanilla=a.vanilla, grupos=grupos)
     if a.vanilla:
         sph, s, pegos = esferas(locais, colocados)
         print(f'vanilla: {len(pegos)}/{len(locais)} baus alcancaveis, vitoria={"ev:VITORIA" in s.i}, {len(sph)} esferas')
@@ -233,10 +249,12 @@ def main():
         return
     pasta = os.path.join(DATA, 'rando', seed)
     n = spoiler(seed, locais, colocados, pasta)
-    print(f'seed {seed}: {len(locais)} baus embaralhados ({len(fixos)} fixos), tentativa {tent}, {n} esferas')
+    nemb = sum(1 for l in locais if any(GRUPOS[g](l) for g in grupos))
+    print(f'seed {seed} ({",".join(grupos)}): {nemb} baus embaralhados ({len(fixos) + len(locais) - nemb} fixos), '
+          f'tentativa {tent}, {n} esferas')
     print('spoiler:', os.path.join(pasta, 'spoiler.txt'))
     if not a.sem_mod:
-        mod, narq = gravar_mod(locais, colocados, seed=seed, saida=a.saida, rstb=a.rstb)
+        mod, narq = gravar_mod(locais, colocados, seed=seed, saida=a.saida, rstb=a.rstb, grupos=grupos)
         if a.saida:   # (o spoiler junto, para o jogador consultar se travar)
             import shutil
             for f in ('spoiler.txt', 'spoiler.json'):
