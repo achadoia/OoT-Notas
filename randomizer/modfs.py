@@ -67,6 +67,34 @@ class Cena:
         return dest
 
 
+CUTSCENES_TRAVADAS = [   # (as unicas com SkipSetting/DisableSkip; o titulo Dm_Title_0005 fica como esta)
+    'Event/EventSetting/EventSettingComponentList/Dm_Kokiri_0000.engine__event__EventSettingComponentList.bgyml',   # abertura
+    'Event/EventSetting/EventSettingComponentList/Dm_StaffCredit_0005.engine__event__EventSettingComponentList.bgyml',  # creditos
+]
+
+
+def liberar_cutscenes(mod_dir):
+    """Tira a trava de pular (SkipSetting -> DisableSkip) da abertura e dos creditos: as outras cutscenes ja aceitam o pular
+    do proprio jogo. O arquivo fica menor (a RSTB nao precisa mudar). Devolve quantos foram gravados."""
+    n = 0
+    for rel in CUTSCENES_TRAVADAS:
+        p = L.find(rel)
+        if not p:
+            print('cutscenes: AVISO nao achei', rel)
+            continue
+        root, ver, E = B.load(open(p, 'rb').read())
+        comps = root[1]['Components'][1]
+        if comps.pop('SkipSetting', None) is None:
+            continue
+        dest = os.path.join(mod_dir, 'romfs', *rel.split('/'))
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        with open(dest, 'wb') as f:
+            f.write(B.dump(root, ver, E))
+        assert 'SkipSetting' not in B.plain(B.load(open(dest, 'rb').read())[0])['Components']
+        n += 1
+    return n
+
+
 def tabela_de_tamanhos(base_zs, tamanhos, destino):
     """A RSTB (System/Resource/ResourceSizeTable.*.rsizetable.zs: "RESTBL", u32 versao, u32 tamanho do nome, u32 entradas
     por hash, u32 entradas por nome; por hash: u32 CRC-32 do caminho sem .zs, u32 tamanho) com as entradas das cenas

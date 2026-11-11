@@ -203,6 +203,7 @@ def gravar_mod(locais, colocados, nome_mod='Randomizer', seed='', saida=None, rs
             c.trocar_drop(h, item)
         c.gravar(mod)
         tamanhos[c.rel] = c.tamanhos
+    print(f'cutscenes: {M.liberar_cutscenes(mod)} liberadas para pular (abertura, creditos)')
     base = rstb or M.rstb_do_jogo()
     if base:
         subiu, sem = M.tabela_de_tamanhos(base, tamanhos, os.path.join(mod, 'rsizetable.zs'))
